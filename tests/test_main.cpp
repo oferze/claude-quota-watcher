@@ -567,6 +567,30 @@ TEST(test_settings_view_expired_and_denied) {
   CHECK(!BuildSettingsView(m, L"p", Hhmm, FakeDateTime).showInstructions);
 }
 
+TEST(test_unreadable_streak_becomes_error) {
+  AppModel m;
+  ApplyClassified(m, ClassifyResponse(Http(200, ReadFile("tests/fixtures/usage-2026-11-18.json"))), 1000);
+  ApplyCredResult(m, PollAction::KeepPrevious, Creds(CredStatus::Unreadable));
+  ApplyCredResult(m, PollAction::KeepPrevious, Creds(CredStatus::Unreadable));
+  CHECK(m.state == AppState::Ok);  // a brief rewrite is tolerated
+  ApplyCredResult(m, PollAction::KeepPrevious, Creds(CredStatus::Unreadable));
+  CHECK(m.state == AppState::Error);  // 3 minutes unreadable: say so
+  CHECK(m.last.has_value());
+  CHECK(StatusLine(m, Hhmm) == L"Can't read the Claude Code login file — last updated 15:52");
+  // Readable again: back to normal on the next result.
+  ApplyCredResult(m, PollAction::Request, Creds(CredStatus::Found, 99));
+  ApplyClassified(m, ClassifyResponse(Http(200, ReadFile("tests/fixtures/usage-2026-11-18.json"))), 1060);
+  CHECK(m.state == AppState::Ok);
+  CHECK(StatusLine(m, Hhmm) == L"Updated 15:52");
+  ApplyCredResult(m, PollAction::KeepPrevious, Creds(CredStatus::Unreadable));
+  CHECK(m.state == AppState::Ok);  // streak restarted
+}
+
+TEST(test_decide_poll_unknown_expiry) {
+  // No expiresAt in the file → unknown, not expired: ask the API (a 401 still catches a dead token).
+  CHECK(DecidePoll(Creds(CredStatus::Found, 0), 1'000'000, false, 0) == PollAction::Request);
+}
+
 TEST(test_dot_colors) {
   CHECK(DotFor(AppState::Ok) == DotColor::None);
   CHECK(DotFor(AppState::NoLogin) == DotColor::Grey);

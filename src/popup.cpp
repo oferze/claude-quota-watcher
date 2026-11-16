@@ -298,9 +298,13 @@ LRESULT Popup::Handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_MOUSEACTIVATE:
       return pinned_ ? MA_ACTIVATE : MA_NOACTIVATE;
     case WM_ACTIVATE:
-      if (LOWORD(wp) == WA_INACTIVE && pinned_) {
-        Hide();
-        lastDeactivateHide_ = GetTickCount64();
+      if (LOWORD(wp) == WA_INACTIVE) {
+        if (pinned_) {
+          Hide();
+          lastDeactivateHide_ = GetTickCount64();
+        }
+      } else {
+        SetFocus(hwnd_);  // keyboard focus, so Esc arrives as WM_KEYDOWN
       }
       return 0;
     case WM_KEYDOWN:

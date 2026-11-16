@@ -41,7 +41,11 @@ struct AppModel {
   int lastHttpStatus = 0;
   std::wstring plan;
   int64_t tokenExpiresAtMs = 0;
+  int unreadableStreak = 0;      // consecutive polls where the credentials file couldn't be read
+  bool credsUnreadable = false;  // streak hit the limit: state is Error because of the file
 };
+
+constexpr int kUnreadableLimit = 3;  // ~3 minutes of an unreadable login file → show an error
 
 void ApplyCredResult(AppModel& m, PollAction a, const CredResult& c);
 void ApplyClassified(AppModel& m, const Classified& c, int64_t nowUtc);

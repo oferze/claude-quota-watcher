@@ -43,12 +43,21 @@ PollAction DecidePoll(const CredResult& c, int64_t nowMs, bool inFlight, int64_t
     case CredStatus::Unreadable: return PollAction::KeepPrevious;
     case CredStatus::Found: break;
   }
-  if (c.creds.expiresAtMs <= nowMs) return PollAction::MarkExpired;
+  if (c.creds.expiresAtMs > 0 && c.creds.expiresAtMs <= nowMs) return PollAction::MarkExpired;  // 0 = unknown
   if (nowMs < retryNotBeforeMs) return PollAction::Skip;
   return PollAction::Request;
 }
 
 void ApplyCredResult(AppModel& m, PollAction a, const CredResult& c) {
+  if (c.status == CredStatus::Unreadable) {
+    if (++m.unreadableStreak >= kUnreadableLimit) {
+      m.state = AppState::Error;
+      m.credsUnreadable = true;
+    }
+  } else {
+    m.unreadableStreak = 0;
+    m.credsUnreadable = false;
+  }
   if (c.status == CredStatus::Found) {
     m.plan = c.creds.plan;
     m.tokenExpiresAtMs = c.creds.expiresAtMs;
@@ -90,9 +99,10 @@ std::wstring StatusLine(const AppModel& m, const std::function<std::wstring(int6
       return L"Login expired — open Claude Code to renew";
     case AppState::AccessDenied:
       return L"Access denied — run /login in Claude Code";
-    case AppState::Error:
-      return m.lastUpdatedUtc ? L"Couldn't reach Claude — last updated " + hhmm(*m.lastUpdatedUtc)
-                              : L"Couldn't reach Claude";
+    case AppState::Error: {
+      const std::wstring what = m.credsUnreadable ? L"Can't read the Claude Code login file" : L"Couldn't reach Claude";
+      return m.lastUpdatedUtc ? what + L" — last updated " + hhmm(*m.lastUpdatedUtc) : what;
+    }
     case AppState::ApiChanged:
       if (m.lastHttpStatus != 0 && m.lastHttpStatus != 200) {
         return L"Usage API changed (HTTP " + std::to_wstring(m.lastHttpStatus) + L") — app may need an update";

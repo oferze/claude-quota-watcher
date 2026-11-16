@@ -37,6 +37,9 @@ HttpOutcome HttpGetUsage(const std::string& accessToken) {
   Handle request(WinHttpOpenRequest(connect.h, L"GET", L"/api/oauth/usage", nullptr, WINHTTP_NO_REFERER,
                                     WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE));
   if (!request) return out;
+  // Never follow redirects: WinHTTP would resend the Authorization header to the new location.
+  DWORD noRedirects = WINHTTP_DISABLE_REDIRECTS;
+  WinHttpSetOption(request.h, WINHTTP_OPTION_DISABLE_FEATURE, &noRedirects, sizeof(noRedirects));
 
   std::wstring headers = L"Authorization: Bearer " + Widen(accessToken) +
                          L"\r\nanthropic-beta: oauth-2025-04-20\r\nAccept: application/json\r\n";
