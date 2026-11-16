@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "json.h"
+#include "usage.h"
 
 namespace {
 struct TestCase { const char* name; void (*fn)(); };
@@ -73,6 +74,96 @@ TEST(test_json_invalid) {
   for (const char* bad : {"", "{", "{\"a\":}", "[1,]", "tru", "{} x", "\"abc", "{\"a\" 1}"}) {
     if (ParseJson(bad)) { Fail(__FILE__, __LINE__, bad); }
   }
+}
+
+// ---------------------------------------------------------------- usage
+
+TEST(test_iso8601) {
+  CHECK(ParseIso8601Utc("2026-11-18T17:40:00.143128+00:00") == 1795023600);
+  CHECK(ParseIso8601Utc("2026-11-22T11:00:00+00:00") == 1795345200);
+  CHECK(ParseIso8601Utc("2026-11-18T19:40:00+02:00") == 1795023600);
+  CHECK(ParseIso8601Utc("2026-11-18T12:10:00-05:30") == 1795023600);
+  CHECK(ParseIso8601Utc("2026-11-18T17:40:00Z") == 1795023600);
+  CHECK(!ParseIso8601Utc("garbage"));
+  CHECK(!ParseIso8601Utc("2026-13-16T17:40:00Z"));
+  CHECK(!ParseIso8601Utc(""));
+}
+
+TEST(test_usage_fixture_limits) {
+  // Real response captured 2026-11-18.
+  auto u = ParseUsage(ReadFile("tests/fixtures/usage-2026-11-18.json"));
+  CHECK(u.has_value());
+  if (!u) return;
+  CHECK(u->rows.size() == 3);
+  if (u->rows.size() != 3) return;
+  CHECK(u->rows[0].label == L"Current session");
+  CHECK(u->rows[0].percent == 89.0);
+  CHECK(u->rows[0].resetsAtUtc == 1795023599);
+  CHECK(u->rows[1].label == L"Weekly · all models");
+  CHECK(u->rows[1].percent == 26.0);
+  CHECK(u->rows[1].resetsAtUtc == 1795345199);
+  CHECK(u->rows[2].label == L"Weekly · Fable");
+  CHECK(u->rows[2].percent == 0.0);
+  CHECK(u->rows[2].resetsAtUtc == 1795345200);
+}
+
+TEST(test_usage_fallback) {
+  auto u = ParseUsage(ReadFile("tests/fixtures/usage-no-limits.json"));
+  CHECK(u.has_value());
+  if (!u) return;
+  CHECK(u->rows.size() == 2);
+  if (u->rows.size() != 2) return;
+  CHECK(u->rows[0].label == L"Current session");
+  CHECK(u->rows[0].percent == 89.0);
+  CHECK(u->rows[0].resetsAtUtc == 1795023599);
+  CHECK(u->rows[1].label == L"Weekly · all models");
+  CHECK(u->rows[1].percent == 26.0);
+}
+
+TEST(test_usage_fallback_opus) {
+  auto u = ParseUsage(R"({"five_hour":{"utilization":5,"resets_at":null},"seven_day":null,)"
+                      R"("seven_day_opus":{"utilization":7,"resets_at":"2026-11-22T11:00:00+00:00"}})");
+  CHECK(u.has_value());
+  if (!u) return;
+  CHECK(u->rows.size() == 2);
+  if (u->rows.size() != 2) return;
+  CHECK(u->rows[0].label == L"Current session");
+  CHECK(u->rows[0].percent == 5.0);
+  CHECK(!u->rows[0].resetsAtUtc);
+  CHECK(u->rows[1].label == L"Weekly · Opus");
+  CHECK(u->rows[1].percent == 7.0);
+  CHECK(u->rows[1].resetsAtUtc == 1795345200);
+}
+
+TEST(test_usage_null_fields_kept) {
+  auto u = ParseUsage(R"({"limits":[{"kind":"session","percent":null,"resets_at":null}]})");
+  CHECK(u.has_value());
+  if (!u) return;
+  CHECK(u->rows.size() == 1);
+  if (u->rows.empty()) return;
+  CHECK(u->rows[0].label == L"Current session");
+  CHECK(!u->rows[0].percent);
+  CHECK(!u->rows[0].resetsAtUtc);
+}
+
+TEST(test_usage_unknown_kind_skipped_scoped_generic) {
+  auto u = ParseUsage(
+      R"({"limits":[{"kind":"mystery","percent":3},)"
+      R"({"kind":"weekly_scoped","percent":4,"scope":{"model":{"display_name":"Sonnet"}}},)"
+      R"({"kind":"weekly_scoped","percent":5,"scope":{"model":null}}]})");
+  CHECK(u.has_value());
+  if (!u) return;
+  CHECK(u->rows.size() == 1);
+  if (u->rows.empty()) return;
+  CHECK(u->rows[0].label == L"Weekly · Sonnet");
+  CHECK(u->rows[0].percent == 4.0);
+}
+
+TEST(test_usage_unrecognizable) {
+  CHECK(!ParseUsage("{}"));
+  CHECK(!ParseUsage(R"({"limits":[]})"));
+  CHECK(!ParseUsage("not json"));
+  CHECK(!ParseUsage("[1,2]"));
 }
 
 // ---------------------------------------------------------------- main
