@@ -53,5 +53,10 @@ std::wstring FormatReset(int64_t resetUtc, int64_t nowUtc, const std::function<S
 std::wstring FormatPercent(std::optional<double> p);  // "62%", "—"
 double BarFraction(std::optional<double> p);          // clamped to [0,1]; nullopt→0
 
+// Clock helpers (real system clock / time zone).
+int64_t NowUnixMs();
+SYSTEMTIME UnixToLocal(int64_t unixSec);
+std::wstring LocalHhmm(int64_t unixSec);
+
 // Where to put a popup of `popup` size next to `anchor` (tray icon rect) inside `workArea`.
 POINT PlacePopup(RECT anchor, RECT workArea, SIZE popup);

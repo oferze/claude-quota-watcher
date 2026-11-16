@@ -155,3 +155,33 @@ POINT PlacePopup(RECT anchor, RECT work, SIZE popup) {
   p.y = std::max(work.top + kMargin, std::min(p.y, maxY));
   return p;
 }
+
+namespace {
+constexpr int64_t kUnixEpochAsFileTime = 116444736000000000LL;  // 100 ns ticks from 1601 to 1970
+}
+
+int64_t NowUnixMs() {
+  FILETIME ft;
+  GetSystemTimeAsFileTime(&ft);
+  ULARGE_INTEGER u;
+  u.LowPart = ft.dwLowDateTime;
+  u.HighPart = ft.dwHighDateTime;
+  return (static_cast<int64_t>(u.QuadPart) - kUnixEpochAsFileTime) / 10000;
+}
+
+SYSTEMTIME UnixToLocal(int64_t unixSec) {
+  ULARGE_INTEGER u;
+  u.QuadPart = static_cast<ULONGLONG>(unixSec * 10000000LL + kUnixEpochAsFileTime);
+  FILETIME ft{u.LowPart, u.HighPart};
+  SYSTEMTIME utc{}, local{};
+  FileTimeToSystemTime(&ft, &utc);
+  if (!SystemTimeToTzSpecificLocalTime(nullptr, &utc, &local)) return utc;
+  return local;
+}
+
+std::wstring LocalHhmm(int64_t unixSec) {
+  SYSTEMTIME st = UnixToLocal(unixSec);
+  wchar_t buf[8];
+  swprintf_s(buf, L"%02u:%02u", st.wHour, st.wMinute);
+  return buf;
+}

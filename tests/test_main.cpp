@@ -1,12 +1,15 @@
 // Unit tests for Claude Quota Watcher. Run: build.bat test
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include "credentials.h"
+#include "http.h"
 #include "json.h"
 #include "state.h"
 #include "usage.h"
@@ -410,6 +413,22 @@ TEST(test_place_popup_anchor_inside_work_area) {
   CHECK(p.y + s.cy <= 900);
 }
 
+TEST(test_time_helpers) {
+  long long nowMs = static_cast<long long>(std::time(nullptr)) * 1000;
+  CHECK(std::llabs(NowUnixMs() - nowMs) < 5000);
+  // 2026-11-18T17:40:00Z: local conversion must agree with the OS's own UTC->local conversion.
+  SYSTEMTIME utc{};
+  utc.wYear = 2026; utc.wMonth = 11; utc.wDay = 18; utc.wHour = 17; utc.wMinute = 40;
+  SYSTEMTIME expect{};
+  SystemTimeToTzSpecificLocalTime(nullptr, &utc, &expect);
+  SYSTEMTIME got = UnixToLocal(1795023600);
+  CHECK(got.wYear == expect.wYear && got.wMonth == expect.wMonth && got.wDay == expect.wDay);
+  CHECK(got.wHour == expect.wHour && got.wMinute == expect.wMinute && got.wDayOfWeek == expect.wDayOfWeek);
+  wchar_t buf[8];
+  swprintf_s(buf, L"%02u:%02u", expect.wHour, expect.wMinute);
+  CHECK(LocalHhmm(1795023600) == buf);
+}
+
 TEST(test_dot_colors) {
   CHECK(DotFor(AppState::Ok) == DotColor::None);
   CHECK(DotFor(AppState::NoLogin) == DotColor::Grey);
@@ -421,8 +440,50 @@ TEST(test_dot_colors) {
 
 // ---------------------------------------------------------------- main
 
+namespace {
+const char* StateName(AppState s) {
+  switch (s) {
+    case AppState::Ok: return "Ok";
+    case AppState::NoLogin: return "NoLogin";
+    case AppState::Expired: return "Expired";
+    case AppState::AccessDenied: return "AccessDenied";
+    case AppState::Error: return "Error";
+    case AppState::ApiChanged: return "ApiChanged";
+  }
+  return "?";
+}
+std::string Narrow(const std::wstring& w) {
+  int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
+  std::string s(static_cast<size_t>(n), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), s.data(), n, nullptr, nullptr);
+  return s;
+}
+
+// Calls the real endpoint with the real login. Prints status and parsed rows only — never the token or body.
+int RunLive() {
+  SetConsoleOutputCP(CP_UTF8);
+  CredResult c = LoadCredentials(CredentialsPath());
+  if (c.status != CredStatus::Found) {
+    std::printf("credentials: %s\n", c.status == CredStatus::NotFound ? "NotFound" : "Unreadable");
+    return 1;
+  }
+  HttpOutcome r = HttpGetUsage(c.creds.accessToken);
+  Classified k = ClassifyResponse(r);
+  std::printf("HTTP %d%s\n", r.status, r.transportOk ? "" : " (transport failure)");
+  if (r.retryAfterSec) std::printf("Retry-After %d\n", *r.retryAfterSec);
+  std::printf("%s\n", StateName(k.state));
+  if (k.snapshot) {
+    for (const auto& row : k.snapshot->rows) {
+      std::printf("%s | %s | %lld\n", Narrow(row.label).c_str(), Narrow(FormatPercent(row.percent)).c_str(),
+                  row.resetsAtUtc ? static_cast<long long>(*row.resetsAtUtc) : -1LL);
+    }
+  }
+  return k.state == AppState::Ok ? 0 : 1;
+}
+}  // namespace
+
 int main(int argc, char** argv) {
-  (void)argc; (void)argv;
+  if (argc > 1 && std::strcmp(argv[1], "--live") == 0) return RunLive();
   int passed = 0, failed = 0;
   for (auto& t : Registry()) {
     int before = g_failures;
