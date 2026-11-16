@@ -22,3 +22,22 @@ PopupView BuildPopupView(const AppModel& m, int64_t nowUtc, const std::function<
   }
   return v;
 }
+
+SettingsView BuildSettingsView(const AppModel& m, const std::wstring& credentialsPath,
+                               const std::function<std::wstring(int64_t)>& hhmm,
+                               const std::function<std::wstring(int64_t)>& dateTime) {
+  SettingsView v;
+  switch (m.state) {
+    case AppState::NoLogin: v.login = L"Not found"; break;
+    case AppState::Expired: v.login = L"Expired"; break;
+    default: v.login = L"Found"; break;
+  }
+  v.plan = m.plan.empty() ? L"—" : m.plan;
+  if (!m.plan.empty()) v.plan[0] = static_cast<wchar_t>(std::towupper(v.plan[0]));
+  v.tokenExpires = m.tokenExpiresAtMs > 0 ? dateTime(m.tokenExpiresAtMs / 1000) : L"—";
+  v.path = credentialsPath;
+  v.lastResult = StatusLine(m, hhmm);
+  v.showInstructions =
+      m.state == AppState::NoLogin || m.state == AppState::Expired || m.state == AppState::AccessDenied;
+  return v;
+}

@@ -523,6 +523,50 @@ TEST(test_popup_view_missing_values) {
   CHECK(v.rows[0].fraction == 0.0);
 }
 
+namespace {
+std::wstring FakeDateTime(int64_t unixSec) { return L"DT" + std::to_wstring(unixSec); }
+}
+
+TEST(test_settings_view_found) {
+  AppModel m;
+  ApplyCredResult(m, PollAction::Request, Creds(CredStatus::Found, 1795024800123LL));
+  ApplyClassified(m, ClassifyResponse(Http(200, ReadFile("tests/fixtures/usage-2026-11-18.json"))), 1000);
+  auto v = BuildSettingsView(m, L"C:\\u\\.claude\\.credentials.json", Hhmm, FakeDateTime);
+  CHECK(v.login == L"Found");
+  CHECK(v.plan == L"Team");
+  CHECK(v.tokenExpires == L"DT1795024800");
+  CHECK(v.path == L"C:\\u\\.claude\\.credentials.json");
+  CHECK(v.lastResult == L"Updated 15:52");
+  CHECK(!v.showInstructions);
+}
+
+TEST(test_settings_view_not_found) {
+  AppModel m;
+  ApplyCredResult(m, PollAction::MarkNoLogin, Creds(CredStatus::NotFound));
+  auto v = BuildSettingsView(m, L"p", Hhmm, FakeDateTime);
+  CHECK(v.login == L"Not found");
+  CHECK(v.plan == L"—");
+  CHECK(v.tokenExpires == L"—");
+  CHECK(v.lastResult == L"Not connected");
+  CHECK(v.showInstructions);
+}
+
+TEST(test_settings_view_expired_and_denied) {
+  AppModel m;
+  ApplyCredResult(m, PollAction::MarkExpired, Creds(CredStatus::Found, 5000));
+  auto v = BuildSettingsView(m, L"p", Hhmm, FakeDateTime);
+  CHECK(v.login == L"Expired");
+  CHECK(v.tokenExpires == L"DT5");
+  CHECK(v.showInstructions);
+  m.state = AppState::AccessDenied;
+  v = BuildSettingsView(m, L"p", Hhmm, FakeDateTime);
+  CHECK(v.login == L"Found");
+  CHECK(v.lastResult == L"Access denied — run /login in Claude Code");
+  CHECK(v.showInstructions);
+  m.state = AppState::Error;
+  CHECK(!BuildSettingsView(m, L"p", Hhmm, FakeDateTime).showInstructions);
+}
+
 TEST(test_dot_colors) {
   CHECK(DotFor(AppState::Ok) == DotColor::None);
   CHECK(DotFor(AppState::NoLogin) == DotColor::Grey);

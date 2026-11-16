@@ -23,5 +23,23 @@ struct PopupView {
   bool showSettingsLink = false;    // NoLogin → "Settings…" link instead of stats
 };
 
+// What the Settings window shows.
+struct SettingsView {
+  std::wstring login;         // "Found" / "Not found" / "Expired"
+  std::wstring plan;          // "Team" or "—"
+  std::wstring tokenExpires;  // local date-time or "—"
+  std::wstring path;          // credentials file path
+  std::wstring lastResult;    // StatusLine()
+  bool showInstructions = false;
+};
+
+constexpr wchar_t kLoginInstructions[] =
+    L"Run claude in a terminal and type /login (or just use Claude Code — it renews the login automatically).";
+
+// dateTime: formats a Unix time as a local date-time string.
+SettingsView BuildSettingsView(const AppModel& m, const std::wstring& credentialsPath,
+                               const std::function<std::wstring(int64_t)>& hhmm,
+                               const std::function<std::wstring(int64_t)>& dateTime);
+
 PopupView BuildPopupView(const AppModel& m, int64_t nowUtc, const std::function<std::wstring(int64_t)>& hhmm,
                          const std::function<SYSTEMTIME(int64_t)>& toLocal);

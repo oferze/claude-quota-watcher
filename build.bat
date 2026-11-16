@@ -21,7 +21,7 @@ if errorlevel 1 (
 set CFLAGS=/nologo /std:c++17 /O2 /W4 /EHsc /utf-8 /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX
 set CORE=src\json.cpp src\usage.cpp src\credentials.cpp src\state.cpp src\popup_view.cpp
 set NET=src\http.cpp src\poller.cpp
-set UI=src\tray.cpp src\popup.cpp
+set UI=src\tray.cpp src\popup.cpp src\settings.cpp
 set LIBS=user32.lib gdi32.lib shell32.lib winhttp.lib comctl32.lib ole32.lib advapi32.lib dwmapi.lib shcore.lib
 
 if not exist bin mkdir bin

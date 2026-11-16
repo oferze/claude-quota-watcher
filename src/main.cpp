@@ -7,6 +7,7 @@
 
 #include "poller.h"
 #include "popup.h"
+#include "settings.h"
 #include "state.h"
 #include "tray.h"
 
@@ -24,6 +25,7 @@ struct App {
   int64_t retryNotBeforeMs = 0;
   UINT taskbarCreatedMsg = 0;
   std::unique_ptr<Popup> popup;
+  std::unique_ptr<SettingsWindow> settings;
   bool previewPending = false;  // --preview: pin the popup after the first result (for screenshots)
 };
 App g_app;
@@ -37,6 +39,7 @@ void OnPollResult(PollResult* raw) {
   TraySetDot(g_app.hwnd, DotFor(m.state));
   g_app.poller->OnResultHandled(*r);
   g_app.popup->Refresh();
+  g_app.settings->Refresh();
   if (g_app.previewPending) {
     g_app.previewPending = false;
     g_app.popup->TogglePinned(TrayIconRect(g_app.hwnd));
@@ -75,6 +78,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       return 0;
     case WM_COMMAND:
       switch (LOWORD(wp)) {
+        case IDM_SETTINGS:
+          g_app.popup->Hide();
+          g_app.settings->Show();
+          break;
         case IDM_EXIT:
           DestroyWindow(hwnd);
           break;
@@ -88,6 +95,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_DESTROY:
       KillTimer(hwnd, kPollTimer);
       g_app.popup.reset();
+      g_app.settings.reset();
       TrayRemove(hwnd);
       PostQuitMessage(0);
       return 0;
@@ -119,13 +127,18 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
   g_app.poller = std::make_unique<Poller>(g_app.hwnd);
   g_app.popup = std::make_unique<Popup>(inst, &g_app.model,
                                         [] { PostMessageW(g_app.hwnd, WM_COMMAND, IDM_SETTINGS, 0); });
+  // "Check again" re-reads the login and polls now, ignoring any Retry-After wait.
+  g_app.settings = std::make_unique<SettingsWindow>(inst, &g_app.model, [] { g_app.poller->PollNow(0); });
   g_app.previewPending = wcsstr(GetCommandLineW(), L"--preview") != nullptr;
   TrayAdd(g_app.hwnd, DotFor(g_app.model.state));
   g_app.poller->PollNow(0);
   SetTimer(g_app.hwnd, kPollTimer, kPollIntervalMs, nullptr);
+  if (wcsstr(GetCommandLineW(), L"--settings")) g_app.settings->Show();
 
   MSG msg;
   while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+    HWND sw = g_app.settings ? g_app.settings->hwnd() : nullptr;
+    if (sw && IsDialogMessageW(sw, &msg)) continue;  // Tab / Enter / Esc in the Settings window
     TranslateMessage(&msg);
     DispatchMessageW(&msg);
   }
