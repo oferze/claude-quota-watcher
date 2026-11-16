@@ -454,6 +454,44 @@ std::vector<uint32_t> IconPixels(HICON icon, int size) {
 }
 }  // namespace
 
+TEST(test_tray_icon_usage_fill) {
+  // Session usage greys the orange body from the left: 0% all orange, 50% left half grey, 100% all grey.
+  const int n = 32;
+  const int left = n / 2 * n + 3, right = n / 2 * n + (n - 4);  // orange body pixels near each edge
+  auto rgb = [](uint32_t v) { return v & 0xFFFFFF; };
+  struct Case { double fraction; uint32_t left, right; } cases[] = {
+      {0.0, 0xD97757, 0xD97757}, {0.5, 0xA0A0A0, 0xD97757}, {1.0, 0xA0A0A0, 0xA0A0A0}};
+  for (const Case& c : cases) {
+    HICON icon = MakeTrayIcon(DotColor::None, n, c.fraction);
+    auto px = IconPixels(icon, n);
+    DestroyIcon(icon);
+    CHECK(px.size() == n * n);
+    if (px.size() != n * n) continue;
+    CHECK(rgb(px[left]) == c.left);
+    CHECK(rgb(px[right]) == c.right);
+  }
+  // The used/unused boundary follows the fraction: at 25%, column 6 (center 6.5/32 ≈ 20%) is grey and
+  // column 10 (≈ 33%) is orange. Row 4 crosses the orange body above the white gauge ring.
+  HICON q = MakeTrayIcon(DotColor::None, n, 0.25);
+  auto qp = IconPixels(q, n);
+  DestroyIcon(q);
+  CHECK(qp.size() == n * n);
+  if (qp.size() != n * n) return;
+  CHECK(rgb(qp[4 * n + 6]) == 0xA0A0A0);
+  CHECK(rgb(qp[4 * n + 10]) == 0xD97757);
+}
+
+TEST(test_session_fraction) {
+  AppModel m;
+  CHECK(SessionFraction(m) == 0.0);  // no data yet: full orange
+  ApplyClassified(m, ClassifyResponse(Http(200, ReadFile("tests/fixtures/usage-2026-11-18.json"))), 1000);
+  CHECK(SessionFraction(m) == 0.89);  // the "Current session" row, not the weekly ones
+  m.last->rows[0].percent = 150.0;
+  CHECK(SessionFraction(m) == 1.0);
+  m.last->rows.erase(m.last->rows.begin());  // no session row → 0
+  CHECK(SessionFraction(m) == 0.0);
+}
+
 TEST(test_tray_icon_pixels) {
   const int n = 32;
   HICON plain = MakeTrayIcon(DotColor::None, n);

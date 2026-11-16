@@ -195,3 +195,11 @@ std::wstring LocalHhmm(int64_t unixSec) {
   swprintf_s(buf, L"%02u:%02u", st.wHour, st.wMinute);
   return buf;
 }
+
+double SessionFraction(const AppModel& m) {
+  if (!m.last) return 0.0;
+  for (const LimitRow& r : m.last->rows) {
+    if (r.label == L"Current session") return BarFraction(r.percent);
+  }
+  return 0.0;
+}

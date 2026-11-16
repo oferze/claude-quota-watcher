@@ -36,7 +36,7 @@ void OnPollResult(PollResult* raw) {
   ApplyCredResult(m, r->action, r->creds);
   if (r->classified) ApplyClassified(m, *r->classified, NowUnixMs() / 1000);
   if (r->retryAfterSec) g_app.retryNotBeforeMs = NowUnixMs() + int64_t{*r->retryAfterSec} * 1000;
-  TraySetDot(g_app.hwnd, DotFor(m.state));
+  TraySetIcon(g_app.hwnd, DotFor(m.state), SessionFraction(m));
   g_app.poller->OnResultHandled(*r);
   g_app.popup->Refresh();
   g_app.settings->Refresh();
@@ -48,7 +48,7 @@ void OnPollResult(PollResult* raw) {
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   if (msg == g_app.taskbarCreatedMsg && msg != 0) {
-    TrayAdd(hwnd, DotFor(g_app.model.state));
+    TrayAdd(hwnd, DotFor(g_app.model.state), SessionFraction(g_app.model));
     return 0;
   }
   switch (msg) {
@@ -90,7 +90,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_SETTINGCHANGE:
     case WM_DISPLAYCHANGE:
     case WM_DPICHANGED:
-      TraySetDot(hwnd, DotFor(g_app.model.state));  // redraw icon at the current size
+      TraySetIcon(hwnd, DotFor(g_app.model.state), SessionFraction(g_app.model));  // redraw icon at the current size
       return DefWindowProcW(hwnd, msg, wp, lp);
     case WM_DESTROY:
       KillTimer(hwnd, kPollTimer);
@@ -130,7 +130,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
   // "Check again" re-reads the login and polls now, ignoring any Retry-After wait.
   g_app.settings = std::make_unique<SettingsWindow>(inst, &g_app.model, [] { g_app.poller->PollNow(0); });
   g_app.previewPending = wcsstr(GetCommandLineW(), L"--preview") != nullptr;
-  TrayAdd(g_app.hwnd, DotFor(g_app.model.state));
+  TrayAdd(g_app.hwnd, DotFor(g_app.model.state), SessionFraction(g_app.model));
   g_app.poller->PollNow(0);
   SetTimer(g_app.hwnd, kPollTimer, kPollIntervalMs, nullptr);
   if (wcsstr(GetCommandLineW(), L"--settings")) g_app.settings->Show();

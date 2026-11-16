@@ -57,6 +57,9 @@ std::wstring FormatReset(int64_t resetUtc, int64_t nowUtc, const std::function<S
 std::wstring FormatPercent(std::optional<double> p);  // "62%", "—"
 double BarFraction(std::optional<double> p);          // clamped to [0,1]; nullopt→0
 
+// Current-session usage as a 0..1 fraction for the tray icon (0 when unknown).
+double SessionFraction(const AppModel& m);
+
 // Clock helpers (real system clock / time zone).
 int64_t NowUnixMs();
 SYSTEMTIME UnixToLocal(int64_t unixSec);

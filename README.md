@@ -24,7 +24,12 @@ the app picks it up within a minute.
 The usage endpoint is undocumented, so Anthropic may change it. If that happens the popup says
 *"Usage API changed — app may need an update"*.
 
-## Icon status dot
+## Icon
+
+The icon's orange body turns grey from left to right as the **current session** is used up:
+all orange at 0%, left half grey at 50%, all grey at 100%. It updates once a minute.
+
+### Status dot
 
 | Dot | Meaning |
 |---|---|

@@ -11,7 +11,6 @@ namespace {
 
 constexpr UINT kIconId = 1;
 HICON g_icon = nullptr;
-DotColor g_dot = DotColor::None;
 
 struct Rgba { float r, g, b, a; };
 
@@ -26,13 +25,15 @@ Rgba Over(Rgba top, Rgba bottom) {
 constexpr float kPi = 3.14159265f;
 
 // Color of the glyph at normalized point (x, y) in [0,1]^2, before antialiasing.
-Rgba Sample(float x, float y, DotColor dot) {
+// usedFraction greys the orange body from the left edge (x < usedFraction).
+Rgba Sample(float x, float y, DotColor dot, float usedFraction) {
   const Rgba orange{0xD9 / 255.f, 0x77 / 255.f, 0x57 / 255.f, 1};
+  const Rgba used{0xA0 / 255.f, 0xA0 / 255.f, 0xA0 / 255.f, 1};
   const Rgba white{1, 1, 1, 1};
   Rgba c{0, 0, 0, 0};
   const float dx = x - 0.5f, dy = y - 0.5f;
   const float d = std::sqrt(dx * dx + dy * dy);
-  if (d <= 0.48f) c = orange;
+  if (d <= 0.48f) c = x < usedFraction ? used : orange;
   // Gauge: a 270-degree white arc open at the bottom, plus a needle and hub.
   float ang = std::atan2(dy, dx);              // y down: +pi/2 is straight down
   float fromBottom = std::fabs(ang - kPi / 2);  // distance from "down" direction
@@ -80,8 +81,9 @@ void ReplaceIcon(HICON icon) {
 
 }  // namespace
 
-HICON MakeTrayIcon(DotColor dot, int sizePx) {
+HICON MakeTrayIcon(DotColor dot, int sizePx, double usedFraction) {
   sizePx = std::max(sizePx, 8);
+  const float used = static_cast<float>(std::clamp(usedFraction, 0.0, 1.0));
   BITMAPV5HEADER bi{};
   bi.bV5Size = sizeof(bi);
   bi.bV5Width = sizePx;
@@ -106,7 +108,7 @@ HICON MakeTrayIcon(DotColor dot, int sizePx) {
       float r = 0, g = 0, b = 0, a = 0;
       for (int sy = 0; sy < kSs; ++sy) {
         for (int sx = 0; sx < kSs; ++sx) {
-          Rgba s = Sample((x + (sx + 0.5f) / kSs) / sizePx, (y + (sy + 0.5f) / kSs) / sizePx, dot);
+          Rgba s = Sample((x + (sx + 0.5f) / kSs) / sizePx, (y + (sy + 0.5f) / kSs) / sizePx, dot, used);
           r += s.r * s.a; g += s.g * s.a; b += s.b * s.a; a += s.a;  // premultiplied accumulate
         }
       }
@@ -133,9 +135,8 @@ HICON MakeTrayIcon(DotColor dot, int sizePx) {
   return icon;
 }
 
-bool TrayAdd(HWND hwnd, DotColor dot) {
-  g_dot = dot;
-  ReplaceIcon(MakeTrayIcon(dot, IconSize(hwnd)));
+bool TrayAdd(HWND hwnd, DotColor dot, double usedFraction) {
+  ReplaceIcon(MakeTrayIcon(dot, IconSize(hwnd), usedFraction));
   NOTIFYICONDATAW nid = BaseData(hwnd);
   nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
   nid.uCallbackMessage = WM_APP_TRAY;
@@ -147,9 +148,8 @@ bool TrayAdd(HWND hwnd, DotColor dot) {
   return Shell_NotifyIconW(NIM_SETVERSION, &nid) != FALSE;
 }
 
-void TraySetDot(HWND hwnd, DotColor dot) {
-  g_dot = dot;
-  ReplaceIcon(MakeTrayIcon(dot, IconSize(hwnd)));
+void TraySetIcon(HWND hwnd, DotColor dot, double usedFraction) {
+  ReplaceIcon(MakeTrayIcon(dot, IconSize(hwnd), usedFraction));
   NOTIFYICONDATAW nid = BaseData(hwnd);
   nid.uFlags = NIF_ICON;
   nid.hIcon = g_icon;
