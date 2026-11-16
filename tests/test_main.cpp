@@ -11,6 +11,7 @@
 #include "credentials.h"
 #include "http.h"
 #include "json.h"
+#include "popup_view.h"
 #include "state.h"
 #include "tray.h"
 #include "usage.h"
@@ -471,6 +472,55 @@ TEST(test_tray_icon_pixels) {
   CHECK(rgb(g[dot]) == 0x808080);
   CHECK(rgb(p[dot]) != 0xE0302A && rgb(p[dot]) != 0x808080);
   DestroyIcon(plain); DestroyIcon(red); DestroyIcon(grey);
+}
+
+TEST(test_popup_view_ok) {
+  AppModel m;
+  ApplyCredResult(m, PollAction::Request, Creds(CredStatus::Found, 99));
+  ApplyClassified(m, ClassifyResponse(Http(200, ReadFile("tests/fixtures/usage-2026-11-18.json"))), 1795022800);
+  auto v = BuildPopupView(m, 1795022800, Hhmm, [](int64_t) { return At(1, 17, 39); });
+  CHECK(v.plan == L"Team");
+  CHECK(v.rows.size() == 3);
+  if (v.rows.size() != 3) return;
+  CHECK(v.rows[0].label == L"Current session");
+  CHECK(v.rows[0].percent == L"89%");
+  CHECK(v.rows[0].fraction == 0.89);
+  CHECK(v.rows[0].reset == L"Resets 17:39 (in 14m)");
+  CHECK(v.rows[2].label == L"Weekly · Fable");
+  CHECK(v.status == L"Updated 15:52");
+  CHECK(!v.statusIsError);
+  CHECK(!v.showSettingsLink);
+}
+
+TEST(test_popup_view_error_keeps_rows) {
+  AppModel m;
+  ApplyClassified(m, ClassifyResponse(Http(200, ReadFile("tests/fixtures/usage-2026-11-18.json"))), 1795022800);
+  ApplyClassified(m, ClassifyResponse(Http(404)), 1795022860);
+  auto v = BuildPopupView(m, 1795022860, Hhmm, [](int64_t) { return At(1, 17, 39); });
+  CHECK(v.rows.size() == 3);
+  CHECK(v.statusIsError);
+  CHECK(v.status == L"Usage API changed (HTTP 404) — app may need an update");
+}
+
+TEST(test_popup_view_no_login) {
+  AppModel m;  // initial state: NoLogin
+  auto v = BuildPopupView(m, 1795022800, Hhmm, [](int64_t) { return At(1, 17, 39); });
+  CHECK(v.rows.empty());
+  CHECK(v.showSettingsLink);
+  CHECK(v.status == L"Not connected");
+  CHECK(!v.statusIsError);
+  CHECK(v.plan.empty());
+}
+
+TEST(test_popup_view_missing_values) {
+  AppModel m;
+  ApplyClassified(m, ClassifyResponse(Http(200, R"({"limits":[{"kind":"session","percent":null,"resets_at":null}]})")), 5);
+  auto v = BuildPopupView(m, 5, Hhmm, [](int64_t) { return At(1, 17, 39); });
+  CHECK(v.rows.size() == 1);
+  if (v.rows.empty()) return;
+  CHECK(v.rows[0].percent == L"—");
+  CHECK(v.rows[0].reset.empty());
+  CHECK(v.rows[0].fraction == 0.0);
 }
 
 TEST(test_dot_colors) {

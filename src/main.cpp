@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "poller.h"
+#include "popup.h"
 #include "state.h"
 #include "tray.h"
 
@@ -22,6 +23,8 @@ struct App {
   std::unique_ptr<Poller> poller;
   int64_t retryNotBeforeMs = 0;
   UINT taskbarCreatedMsg = 0;
+  std::unique_ptr<Popup> popup;
+  bool previewPending = false;  // --preview: pin the popup after the first result (for screenshots)
 };
 App g_app;
 
@@ -33,6 +36,11 @@ void OnPollResult(PollResult* raw) {
   if (r->retryAfterSec) g_app.retryNotBeforeMs = NowUnixMs() + int64_t{*r->retryAfterSec} * 1000;
   TraySetDot(g_app.hwnd, DotFor(m.state));
   g_app.poller->OnResultHandled(*r);
+  g_app.popup->Refresh();
+  if (g_app.previewPending) {
+    g_app.previewPending = false;
+    g_app.popup->TogglePinned(TrayIconRect(g_app.hwnd));
+  }
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -50,7 +58,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP_TRAY:
       switch (LOWORD(lp)) {
         case WM_CONTEXTMENU:
+          g_app.popup->Hide();
           ShowTrayMenu(hwnd, POINT{GET_X_LPARAM(wp), GET_Y_LPARAM(wp)});
+          break;
+        case NIN_POPUPOPEN:
+          g_app.popup->ShowHover(TrayIconRect(hwnd));
+          break;
+        case NIN_POPUPCLOSE:
+          g_app.popup->OnIconHoverEnd();
+          break;
+        case NIN_SELECT:
+        case NIN_KEYSELECT:
+          g_app.popup->TogglePinned(TrayIconRect(hwnd));
           break;
       }
       return 0;
@@ -68,6 +87,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       return DefWindowProcW(hwnd, msg, wp, lp);
     case WM_DESTROY:
       KillTimer(hwnd, kPollTimer);
+      g_app.popup.reset();
       TrayRemove(hwnd);
       PostQuitMessage(0);
       return 0;
@@ -97,6 +117,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
   ChangeWindowMessageFilterEx(g_app.hwnd, g_app.taskbarCreatedMsg, MSGFLT_ALLOW, nullptr);
 
   g_app.poller = std::make_unique<Poller>(g_app.hwnd);
+  g_app.popup = std::make_unique<Popup>(inst, &g_app.model,
+                                        [] { PostMessageW(g_app.hwnd, WM_COMMAND, IDM_SETTINGS, 0); });
+  g_app.previewPending = wcsstr(GetCommandLineW(), L"--preview") != nullptr;
   TrayAdd(g_app.hwnd, DotFor(g_app.model.state));
   g_app.poller->PollNow(0);
   SetTimer(g_app.hwnd, kPollTimer, kPollIntervalMs, nullptr);
