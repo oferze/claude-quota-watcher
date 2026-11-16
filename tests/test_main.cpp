@@ -12,6 +12,7 @@
 #include "http.h"
 #include "json.h"
 #include "state.h"
+#include "tray.h"
 #include "usage.h"
 
 namespace {
@@ -427,6 +428,49 @@ TEST(test_time_helpers) {
   wchar_t buf[8];
   swprintf_s(buf, L"%02u:%02u", expect.wHour, expect.wMinute);
   CHECK(LocalHhmm(1795023600) == buf);
+}
+
+namespace {
+// Returns ARGB pixels of an icon's color bitmap (top-down), or empty on failure.
+std::vector<uint32_t> IconPixels(HICON icon, int size) {
+  std::vector<uint32_t> px;
+  ICONINFO ii{};
+  if (!icon || !GetIconInfo(icon, &ii)) return px;
+  BITMAPINFO bi{};
+  bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+  bi.bmiHeader.biWidth = size;
+  bi.bmiHeader.biHeight = -size;
+  bi.bmiHeader.biPlanes = 1;
+  bi.bmiHeader.biBitCount = 32;
+  bi.bmiHeader.biCompression = BI_RGB;
+  px.resize(static_cast<size_t>(size) * size);
+  HDC dc = GetDC(nullptr);
+  if (!GetDIBits(dc, ii.hbmColor, 0, size, px.data(), &bi, DIB_RGB_COLORS)) px.clear();
+  ReleaseDC(nullptr, dc);
+  DeleteObject(ii.hbmColor);
+  DeleteObject(ii.hbmMask);
+  return px;
+}
+}  // namespace
+
+TEST(test_tray_icon_pixels) {
+  const int n = 32;
+  HICON plain = MakeTrayIcon(DotColor::None, n);
+  HICON red = MakeTrayIcon(DotColor::Red, n);
+  HICON grey = MakeTrayIcon(DotColor::Grey, n);
+  auto p = IconPixels(plain, n), r = IconPixels(red, n), g = IconPixels(grey, n);
+  CHECK(p.size() == n * n && r.size() == n * n && g.size() == n * n);
+  if (p.size() != n * n || r.size() != n * n || g.size() != n * n) return;
+  auto alpha = [](uint32_t v) { return v >> 24; };
+  auto rgb = [](uint32_t v) { return v & 0xFFFFFF; };
+  CHECK(alpha(p[0]) == 0);                       // transparent corner
+  CHECK(alpha(p[n / 2 * n + 3]) == 255);         // opaque body (left edge of the disc, on orange)
+  CHECK(rgb(p[n / 2 * n + 3]) == 0xD97757);      // Claude orange
+  const int dot = 25 * n + 25;                   // center of the status dot
+  CHECK(rgb(r[dot]) == 0xE0302A);
+  CHECK(rgb(g[dot]) == 0x808080);
+  CHECK(rgb(p[dot]) != 0xE0302A && rgb(p[dot]) != 0x808080);
+  DestroyIcon(plain); DestroyIcon(red); DestroyIcon(grey);
 }
 
 TEST(test_dot_colors) {

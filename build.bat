@@ -21,7 +21,7 @@ if errorlevel 1 (
 set CFLAGS=/nologo /std:c++17 /O2 /W4 /EHsc /utf-8 /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX
 set CORE=src\json.cpp src\usage.cpp src\credentials.cpp src\state.cpp
 set NET=src\http.cpp src\poller.cpp
-set UI=
+set UI=src\tray.cpp
 set LIBS=user32.lib gdi32.lib shell32.lib winhttp.lib comctl32.lib ole32.lib advapi32.lib
 
 if not exist bin mkdir bin
@@ -33,7 +33,7 @@ cl %CFLAGS% /Fo:obj\ /Fe:bin\ClaudeQuotaWatcher.exe %CORE% %NET% %UI% src\main.c
 exit /b %ERRORLEVEL%
 
 :test
-cl %CFLAGS% /Isrc /Fo:obj\ /Fe:bin\tests.exe %CORE% %NET% tests\test_main.cpp /link /SUBSYSTEM:CONSOLE %LIBS%
+cl %CFLAGS% /Isrc /Fo:obj\ /Fe:bin\tests.exe %CORE% %NET% %UI% tests\test_main.cpp /link /SUBSYSTEM:CONSOLE %LIBS%
 if errorlevel 1 exit /b 1
 bin\tests.exe %2
 exit /b %ERRORLEVEL%
