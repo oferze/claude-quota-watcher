@@ -6,7 +6,9 @@
 #include <string>
 #include <vector>
 
+#include "credentials.h"
 #include "json.h"
+#include "state.h"
 #include "usage.h"
 
 namespace {
@@ -164,6 +166,257 @@ TEST(test_usage_unrecognizable) {
   CHECK(!ParseUsage(R"({"limits":[]})"));
   CHECK(!ParseUsage("not json"));
   CHECK(!ParseUsage("[1,2]"));
+}
+
+// ---------------------------------------------------------------- credentials
+
+TEST(test_creds_found) {
+  auto r = LoadCredentialsFromText(
+      R"({"claudeAiOauth":{"accessToken":"t","expiresAt":1763314377000,"subscriptionType":"team"},"x":1})");
+  CHECK(r.status == CredStatus::Found);
+  CHECK(r.creds.accessToken == "t");
+  CHECK(r.creds.expiresAtMs == 1763314377000LL);
+  CHECK(r.creds.plan == L"team");
+}
+
+TEST(test_creds_missing_oauth) {
+  CHECK(LoadCredentialsFromText(R"({"other":1})").status == CredStatus::NotFound);
+}
+
+TEST(test_creds_truncated_is_unreadable) {
+  CHECK(LoadCredentialsFromText(R"({"claudeAiOauth":{"accessToken":"t")").status == CredStatus::Unreadable);
+  CHECK(LoadCredentialsFromText("").status == CredStatus::Unreadable);
+  CHECK(LoadCredentialsFromText(R"({"claudeAiOauth":{"expiresAt":1}})").status == CredStatus::Unreadable);
+}
+
+TEST(test_creds_file_absent) {
+  CHECK(LoadCredentials(L"C:\\nonexistent\\x.json").status == CredStatus::NotFound);
+}
+
+TEST(test_creds_file_found) {
+  wchar_t tmp[MAX_PATH];
+  GetTempPathW(MAX_PATH, tmp);
+  std::wstring path = std::wstring(tmp) + L"cqw-test-creds.json";
+  HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
+  const char body[] = R"({"claudeAiOauth":{"accessToken":"abc","expiresAt":5}})";
+  DWORD written = 0;
+  WriteFile(h, body, sizeof(body) - 1, &written, nullptr);
+  CloseHandle(h);
+  auto r = LoadCredentials(path);
+  DeleteFileW(path.c_str());
+  CHECK(r.status == CredStatus::Found);
+  CHECK(r.creds.accessToken == "abc");
+  CHECK(r.creds.expiresAtMs == 5);
+}
+
+TEST(test_creds_path_env) {
+  SetEnvironmentVariableW(L"CLAUDE_CONFIG_DIR", L"D:\\cfg");
+  CHECK(CredentialsPath() == L"D:\\cfg\\.credentials.json");
+  SetEnvironmentVariableW(L"CLAUDE_CONFIG_DIR", nullptr);
+  wchar_t prof[MAX_PATH];
+  GetEnvironmentVariableW(L"USERPROFILE", prof, MAX_PATH);
+  CHECK(CredentialsPath() == std::wstring(prof) + L"\\.claude\\.credentials.json");
+}
+
+// ---------------------------------------------------------------- state
+
+namespace {
+HttpOutcome Http(int status, std::string body = "", bool transportOk = true) {
+  HttpOutcome r;
+  r.transportOk = transportOk;
+  r.status = status;
+  r.body = std::move(body);
+  return r;
+}
+CredResult Creds(CredStatus s, int64_t expiresAtMs = 0) {
+  CredResult r;
+  r.status = s;
+  r.creds.accessToken = s == CredStatus::Found ? "t" : "";
+  r.creds.expiresAtMs = expiresAtMs;
+  r.creds.plan = L"team";
+  return r;
+}
+std::wstring Hhmm(int64_t) { return L"15:52"; }
+SYSTEMTIME At(WORD dow, WORD h, WORD m) {
+  SYSTEMTIME st{};
+  st.wYear = 2026; st.wMonth = 11; st.wDay = 18;
+  st.wDayOfWeek = dow; st.wHour = h; st.wMinute = m;
+  return st;
+}
+bool Inside(POINT p, SIZE s, RECT work) {
+  return p.x >= work.left + 8 && p.y >= work.top + 8 && p.x + s.cx <= work.right - 8 &&
+         p.y + s.cy <= work.bottom - 8;
+}
+}  // namespace
+
+TEST(test_classify_matrix) {
+  auto ok = ClassifyResponse(Http(200, ReadFile("tests/fixtures/usage-2026-11-18.json")));
+  CHECK(ok.state == AppState::Ok);
+  CHECK(ok.snapshot && ok.snapshot->rows.size() == 3);
+  CHECK(ok.httpStatus == 200);
+  CHECK(ClassifyResponse(Http(200, "{}")).state == AppState::ApiChanged);
+  CHECK(ClassifyResponse(Http(401)).state == AppState::Expired);
+  CHECK(ClassifyResponse(Http(403)).state == AppState::AccessDenied);
+  CHECK(ClassifyResponse(Http(429)).state == AppState::Error);
+  CHECK(ClassifyResponse(Http(503)).state == AppState::Error);
+  CHECK(ClassifyResponse(Http(0, "", false)).state == AppState::Error);
+  CHECK(ClassifyResponse(Http(404)).state == AppState::ApiChanged);
+  CHECK(ClassifyResponse(Http(404)).httpStatus == 404);
+  CHECK(ClassifyResponse(Http(400)).state == AppState::ApiChanged);
+  CHECK(!ClassifyResponse(Http(503)).snapshot);
+}
+
+TEST(test_decide_poll) {
+  const int64_t now = 1'000'000;
+  CHECK(DecidePoll(Creds(CredStatus::Found, now + 1), now, false, 0) == PollAction::Request);
+  CHECK(DecidePoll(Creds(CredStatus::Found, now - 1), now, false, 0) == PollAction::MarkExpired);
+  CHECK(DecidePoll(Creds(CredStatus::NotFound), now, false, 0) == PollAction::MarkNoLogin);
+  CHECK(DecidePoll(Creds(CredStatus::Unreadable), now, false, 0) == PollAction::KeepPrevious);
+  CHECK(DecidePoll(Creds(CredStatus::Found, now + 1), now, false, now + 5000) == PollAction::Skip);
+}
+
+TEST(test_decide_poll_in_flight) {
+  const int64_t now = 1'000'000;
+  CHECK(DecidePoll(Creds(CredStatus::Found, now + 1), now, true, 0) == PollAction::Skip);
+  CHECK(DecidePoll(Creds(CredStatus::NotFound), now, true, 0) == PollAction::Skip);
+}
+
+TEST(test_apply_keeps_last_snapshot) {
+  AppModel m;
+  ApplyCredResult(m, PollAction::Request, Creds(CredStatus::Found, 99));
+  CHECK(m.plan == L"team");
+  CHECK(m.tokenExpiresAtMs == 99);
+  ApplyClassified(m, ClassifyResponse(Http(200, ReadFile("tests/fixtures/usage-2026-11-18.json"))), 1000);
+  CHECK(m.state == AppState::Ok);
+  CHECK(m.last && m.last->rows.size() == 3);
+  CHECK(m.lastUpdatedUtc == 1000);
+  ApplyClassified(m, ClassifyResponse(Http(503)), 1060);
+  CHECK(m.state == AppState::Error);
+  CHECK(m.last && m.last->rows.size() == 3);
+  CHECK(m.lastUpdatedUtc == 1000);
+  CHECK(StatusLine(m, Hhmm) == L"Couldn't reach Claude — last updated 15:52");
+}
+
+TEST(test_apply_unreadable_keeps_state) {
+  AppModel m;
+  ApplyClassified(m, ClassifyResponse(Http(200, ReadFile("tests/fixtures/usage-2026-11-18.json"))), 1000);
+  ApplyCredResult(m, PollAction::KeepPrevious, Creds(CredStatus::Unreadable));
+  CHECK(m.state == AppState::Ok);
+  CHECK(m.last.has_value());
+}
+
+TEST(test_apply_no_login_and_expired) {
+  AppModel m;
+  ApplyClassified(m, ClassifyResponse(Http(200, ReadFile("tests/fixtures/usage-2026-11-18.json"))), 1000);
+  ApplyCredResult(m, PollAction::MarkExpired, Creds(CredStatus::Found, 5));
+  CHECK(m.state == AppState::Expired);
+  CHECK(m.last.has_value());  // stale numbers still shown with the expired notice
+  ApplyCredResult(m, PollAction::MarkNoLogin, Creds(CredStatus::NotFound));
+  CHECK(m.state == AppState::NoLogin);
+  CHECK(!m.last);  // logged out: don't show someone's stale numbers
+}
+
+TEST(test_status_lines) {
+  AppModel m;
+  m.state = AppState::Ok; m.lastUpdatedUtc = 1;
+  CHECK(StatusLine(m, Hhmm) == L"Updated 15:52");
+  m.state = AppState::NoLogin;
+  CHECK(StatusLine(m, Hhmm) == L"Not connected");
+  m.state = AppState::Expired;
+  CHECK(StatusLine(m, Hhmm) == L"Login expired — open Claude Code to renew");
+  m.state = AppState::AccessDenied;
+  CHECK(StatusLine(m, Hhmm) == L"Access denied — run /login in Claude Code");
+  m.state = AppState::Error;
+  CHECK(StatusLine(m, Hhmm) == L"Couldn't reach Claude — last updated 15:52");
+  m.lastUpdatedUtc.reset();
+  CHECK(StatusLine(m, Hhmm) == L"Couldn't reach Claude");
+  m.state = AppState::ApiChanged; m.lastHttpStatus = 404;
+  CHECK(StatusLine(m, Hhmm) == L"Usage API changed (HTTP 404) — app may need an update");
+  m.lastHttpStatus = 200;
+  CHECK(StatusLine(m, Hhmm) == L"Usage API changed — app may need an update");
+}
+
+TEST(test_format_reset_soon) {
+  const int64_t now = 1'800'000'000;
+  auto at1740 = [](int64_t) { return At(1, 17, 40); };
+  CHECK(FormatReset(now + 4800, now, at1740) == L"Resets 17:40 (in 1h 20m)");
+  CHECK(FormatReset(now + 300, now, at1740) == L"Resets 17:40 (in 5m)");
+  CHECK(FormatReset(now + 7200, now, at1740) == L"Resets 17:40 (in 2h)");
+  CHECK(FormatReset(now + 30, now, at1740) == L"Resets 17:40 (in 1m)");
+}
+
+TEST(test_format_reset_far) {
+  const int64_t now = 1'800'000'000;
+  CHECK(FormatReset(now + 5 * 86400, now, [](int64_t) { return At(0, 13, 0); }) == L"Resets Sun 13:00");
+  CHECK(FormatReset(now + 2 * 86400, now, [](int64_t) { return At(3, 9, 5); }) == L"Resets Wed 09:05");
+}
+
+TEST(test_format_reset_past) {
+  const int64_t now = 1'800'000'000;
+  CHECK(FormatReset(now - 60, now, [](int64_t) { return At(1, 17, 40); }) == L"Resets now");
+  CHECK(FormatReset(now, now, [](int64_t) { return At(1, 17, 40); }) == L"Resets now");
+}
+
+TEST(test_bar_fraction_clamps) {
+  CHECK(BarFraction(62.0) == 0.62);
+  CHECK(BarFraction(150.0) == 1.0);
+  CHECK(BarFraction(-5.0) == 0.0);
+  CHECK(BarFraction(std::nullopt) == 0.0);
+  CHECK(FormatPercent(150.0) == L"150%");
+  CHECK(FormatPercent(62.4) == L"62%");
+  CHECK(FormatPercent(0.0) == L"0%");
+  CHECK(FormatPercent(std::nullopt) == L"—");
+}
+
+TEST(test_place_popup_bottom_taskbar) {
+  RECT work{0, 0, 1920, 1040};
+  SIZE s{300, 280};
+  POINT p = PlacePopup(RECT{1800, 1050, 1816, 1066}, work, s);
+  CHECK(Inside(p, s, work));
+  CHECK(p.y + s.cy == 1040 - 8);
+  CHECK(p.x + s.cx <= 1920 - 8);
+}
+
+TEST(test_place_popup_top_taskbar) {
+  RECT work{0, 40, 1920, 1080};
+  SIZE s{300, 280};
+  POINT p = PlacePopup(RECT{1800, 10, 1816, 26}, work, s);
+  CHECK(Inside(p, s, work));
+  CHECK(p.y == 40 + 8);
+}
+
+TEST(test_place_popup_left_taskbar) {
+  RECT work{60, 0, 1920, 1080};
+  SIZE s{300, 280};
+  POINT p = PlacePopup(RECT{20, 1000, 36, 1016}, work, s);
+  CHECK(Inside(p, s, work));
+  CHECK(p.x == 60 + 8);
+}
+
+TEST(test_place_popup_right_taskbar) {
+  RECT work{0, 0, 1860, 1080};
+  SIZE s{300, 280};
+  POINT p = PlacePopup(RECT{1880, 500, 1896, 516}, work, s);
+  CHECK(Inside(p, s, work));
+  CHECK(p.x + s.cx == 1860 - 8);
+}
+
+TEST(test_place_popup_anchor_inside_work_area) {
+  // Overflow flyout / auto-hidden taskbar: icon sits inside the work area -> popup above it.
+  RECT work{0, 0, 1920, 1080};
+  SIZE s{300, 280};
+  POINT p = PlacePopup(RECT{1700, 900, 1716, 916}, work, s);
+  CHECK(Inside(p, s, work));
+  CHECK(p.y + s.cy <= 900);
+}
+
+TEST(test_dot_colors) {
+  CHECK(DotFor(AppState::Ok) == DotColor::None);
+  CHECK(DotFor(AppState::NoLogin) == DotColor::Grey);
+  CHECK(DotFor(AppState::Expired) == DotColor::Grey);
+  CHECK(DotFor(AppState::AccessDenied) == DotColor::Grey);
+  CHECK(DotFor(AppState::Error) == DotColor::Red);
+  CHECK(DotFor(AppState::ApiChanged) == DotColor::Red);
 }
 
 // ---------------------------------------------------------------- main

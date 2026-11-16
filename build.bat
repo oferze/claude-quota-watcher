@@ -19,7 +19,7 @@ if errorlevel 1 (
 )
 
 set CFLAGS=/nologo /std:c++17 /O2 /W4 /EHsc /utf-8 /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX
-set CORE=src\json.cpp src\usage.cpp
+set CORE=src\json.cpp src\usage.cpp src\credentials.cpp src\state.cpp
 set NET=
 set UI=
 set LIBS=user32.lib gdi32.lib shell32.lib winhttp.lib comctl32.lib ole32.lib advapi32.lib
