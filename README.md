@@ -39,6 +39,10 @@ The icon is a ring that fills clockwise from 12 o'clock as the **current session
 empty at 0%, half way round at 50%, a full circle at 100%. The filled part is orange, turns
 amber from 70% and red from 90%. It updates whenever new numbers arrive.
 
+![The tray icon empty, about 30% full, and full](docs/images/icon-states.png)
+
+*Left to right: 0% used, about 30% used, 100% used.*
+
 ### Status dot
 
 | Dot | Meaning |
