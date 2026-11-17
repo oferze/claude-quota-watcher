@@ -60,6 +60,12 @@ double BarFraction(std::optional<double> p);          // clamped to [0,1]; nullo
 // Current-session usage as a 0..1 fraction for the tray icon (0 when unknown).
 double SessionFraction(const AppModel& m);
 
+// Poll cadence: every minute while the user checked the popup in the last 30 minutes, else every 3.
+// All times are milliseconds on one monotonic clock.
+int64_t PollIntervalMs(int64_t nowMs, int64_t lastCheckMs);
+// Whether a 1-minute timer tick should poll (tolerates a timer firing a few seconds early).
+bool PollDue(int64_t nowMs, int64_t lastCheckMs, int64_t lastPollMs);
+
 // Clock helpers (real system clock / time zone).
 int64_t NowUnixMs();
 SYSTEMTIME UnixToLocal(int64_t unixSec);

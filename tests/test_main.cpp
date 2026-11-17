@@ -492,6 +492,28 @@ TEST(test_session_fraction) {
   CHECK(SessionFraction(m) == 0.0);
 }
 
+TEST(test_poll_interval_by_last_check) {
+  const int64_t min = 60 * 1000;
+  const int64_t now = 1000 * min;
+  CHECK(PollIntervalMs(now, now) == 1 * min);              // just hovered
+  CHECK(PollIntervalMs(now, now - 29 * min) == 1 * min);   // checked 29 min ago
+  CHECK(PollIntervalMs(now, now - 30 * min) == 3 * min);   // 30 min without a check
+  CHECK(PollIntervalMs(now, now - 300 * min) == 3 * min);
+}
+
+TEST(test_poll_due) {
+  const int64_t min = 60 * 1000;
+  const int64_t now = 1000 * min;
+  const int64_t recent = now - 5 * min, stale = now - 45 * min;
+  CHECK(PollDue(now, recent, now - 1 * min));     // fast cadence, a minute since the last poll
+  CHECK(PollDue(now, recent, now - 58 * 1000));   // a 1-minute timer that fires a little early still polls
+  CHECK(!PollDue(now, recent, now - 30 * 1000));
+  CHECK(!PollDue(now, stale, now - 1 * min));     // slow cadence: skip the 1- and 2-minute ticks
+  CHECK(!PollDue(now, stale, now - 2 * min));
+  CHECK(PollDue(now, stale, now - 3 * min));
+  CHECK(PollDue(now, stale, now - 3 * min + 2000));  // early timer at the 3rd tick
+}
+
 TEST(test_tray_icon_pixels) {
   const int n = 32;
   HICON plain = MakeTrayIcon(DotColor::None, n);

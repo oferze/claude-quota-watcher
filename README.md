@@ -13,13 +13,22 @@ A small Windows tray app that shows your Claude plan usage. Hover over the tray 
 
 It reuses the login that **Claude Code** already keeps in
 `%USERPROFILE%\.claude\.credentials.json` (or `%CLAUDE_CONFIG_DIR%\.credentials.json`).
-Once a minute it asks Anthropic's usage endpoint for your numbers. This **costs no tokens**;
+Every minute or so it asks Anthropic's usage endpoint for your numbers. This **costs no tokens**;
 it's an account-info request, not a model call.
 
 The app only ever *reads* that file. It never refreshes or rewrites the login. Claude Code renews
 the login while you use it; if Claude Code hasn't run for a few hours, the login expires and
 the popup says *"Login expired — open Claude Code to renew"*. As soon as Claude Code renews it,
 the app picks it up within a minute.
+
+### How often it checks
+
+- **Every minute** while you've looked at the popup (hovered or clicked the icon) in the last 30 minutes.
+- **Every 3 minutes** after 30 minutes without a look. Hovering again switches back to every minute
+  and refreshes right away.
+- **Not at all** while Windows has the screen off, including sleep. It checks again as soon as the
+  screen comes back on. When the screen turns off is set by your Windows power settings
+  (*Settings → System → Power → Screen timeout*).
 
 The usage endpoint is undocumented, so Anthropic may change it. If that happens the popup says
 *"Usage API changed — app may need an update"*.

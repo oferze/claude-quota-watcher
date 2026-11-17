@@ -166,6 +166,16 @@ POINT PlacePopup(RECT anchor, RECT work, SIZE popup) {
   return p;
 }
 
+int64_t PollIntervalMs(int64_t nowMs, int64_t lastCheckMs) {
+  constexpr int64_t kMin = 60 * 1000;
+  return nowMs - lastCheckMs < 30 * kMin ? 1 * kMin : 3 * kMin;
+}
+
+bool PollDue(int64_t nowMs, int64_t lastCheckMs, int64_t lastPollMs) {
+  constexpr int64_t kTimerSlackMs = 5000;
+  return nowMs - lastPollMs + kTimerSlackMs >= PollIntervalMs(nowMs, lastCheckMs);
+}
+
 namespace {
 constexpr int64_t kUnixEpochAsFileTime = 116444736000000000LL;  // 100 ns ticks from 1601 to 1970
 }
