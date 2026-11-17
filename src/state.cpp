@@ -89,10 +89,12 @@ void ApplyClassified(AppModel& m, const Classified& c, int64_t nowUtc) {
   }
 }
 
-std::wstring StatusLine(const AppModel& m, const std::function<std::wstring(int64_t)>& hhmm) {
+std::wstring StatusLine(const AppModel& m, int64_t nowUtc, const std::function<std::wstring(int64_t)>& hhmm) {
+  // "13:59", or "now (13:59)" when that was under a minute ago.
+  const auto when = [&](int64_t t) { return nowUtc - t < 60 ? L"now (" + hhmm(t) + L")" : hhmm(t); };
   switch (m.state) {
     case AppState::Ok:
-      return m.lastUpdatedUtc ? L"Updated " + hhmm(*m.lastUpdatedUtc) : L"Updated";
+      return m.lastUpdatedUtc ? L"Updated " + when(*m.lastUpdatedUtc) : L"Updated";
     case AppState::NoLogin:
       return L"Not connected";
     case AppState::Expired:
@@ -101,7 +103,7 @@ std::wstring StatusLine(const AppModel& m, const std::function<std::wstring(int6
       return L"Access denied — run /login in Claude Code";
     case AppState::Error: {
       const std::wstring what = m.credsUnreadable ? L"Can't read the Claude Code login file" : L"Couldn't reach Claude";
-      return m.lastUpdatedUtc ? what + L" — last updated " + hhmm(*m.lastUpdatedUtc) : what;
+      return m.lastUpdatedUtc ? what + L" — last updated " + when(*m.lastUpdatedUtc) : what;
     }
     case AppState::ApiChanged:
       if (m.lastHttpStatus != 0 && m.lastHttpStatus != 200) {

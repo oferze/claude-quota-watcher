@@ -50,8 +50,9 @@ constexpr int kUnreadableLimit = 3;  // ~3 minutes of an unreadable login file â
 void ApplyCredResult(AppModel& m, PollAction a, const CredResult& c);
 void ApplyClassified(AppModel& m, const Classified& c, int64_t nowUtc);
 
-// hhmm: formats a Unix time as local "HH:MM".
-std::wstring StatusLine(const AppModel& m, const std::function<std::wstring(int64_t)>& hhmm);
+// hhmm: formats a Unix time as local "HH:MM". An update less than a minute before nowUtc reads
+// "now (HH:MM)".
+std::wstring StatusLine(const AppModel& m, int64_t nowUtc, const std::function<std::wstring(int64_t)>& hhmm);
 // toLocal: converts a Unix time to local SYSTEMTIME.
 std::wstring FormatReset(int64_t resetUtc, int64_t nowUtc, const std::function<SYSTEMTIME(int64_t)>& toLocal);
 std::wstring FormatPercent(std::optional<double> p);  // "62%", "â€”"

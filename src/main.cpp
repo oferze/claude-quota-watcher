@@ -82,7 +82,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       OnPollResult(reinterpret_cast<PollResult*>(lp));
       return 0;
     case WM_TIMER:
-      if (wp == kPollTimer && !g_app.displayOff && PollDue(TickMs(), g_app.lastCheckMs, g_app.lastPollMs)) {
+      if (wp != kPollTimer) return 0;
+      g_app.popup->Refresh();  // ages "Updated now (…)" in an open popup even when this tick doesn't poll
+      g_app.settings->Refresh();
+      if (!g_app.displayOff && PollDue(TickMs(), g_app.lastCheckMs, g_app.lastPollMs)) {
         PollNow(g_app.retryNotBeforeMs);
       }
       return 0;

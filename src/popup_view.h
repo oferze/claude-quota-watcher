@@ -37,7 +37,7 @@ constexpr wchar_t kLoginInstructions[] =
     L"Run claude in a terminal and type /login (or just use Claude Code — it renews the login automatically).";
 
 // dateTime: formats a Unix time as a local date-time string.
-SettingsView BuildSettingsView(const AppModel& m, const std::wstring& credentialsPath,
+SettingsView BuildSettingsView(const AppModel& m, const std::wstring& credentialsPath, int64_t nowUtc,
                                const std::function<std::wstring(int64_t)>& hhmm,
                                const std::function<std::wstring(int64_t)>& dateTime);
 

@@ -113,7 +113,7 @@ void SettingsWindow::Layout() {
 
 void SettingsWindow::Refresh() {
   if (!hwnd_) return;
-  SettingsView v = BuildSettingsView(*model_, CredentialsPath(), LocalHhmm, LocalDateTime);
+  SettingsView v = BuildSettingsView(*model_, CredentialsPath(), NowUnixMs() / 1000, LocalHhmm, LocalDateTime);
   const std::wstring* texts[5] = {&v.login, &v.plan, &v.tokenExpires, &v.path, &v.lastResult};
   for (int i = 0; i < 5; ++i) SetWindowTextW(values_[i], texts[i]->c_str());
   ShowWindow(instructions_, v.showInstructions ? SW_SHOW : SW_HIDE);

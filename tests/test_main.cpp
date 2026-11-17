@@ -299,7 +299,7 @@ TEST(test_apply_keeps_last_snapshot) {
   CHECK(m.state == AppState::Error);
   CHECK(m.last && m.last->rows.size() == 3);
   CHECK(m.lastUpdatedUtc == 1000);
-  CHECK(StatusLine(m, Hhmm) == L"Couldn't reach Claude — last updated 15:52");
+  CHECK(StatusLine(m, 5000, Hhmm) == L"Couldn't reach Claude — last updated 15:52");
 }
 
 TEST(test_apply_unreadable_keeps_state) {
@@ -324,21 +324,32 @@ TEST(test_apply_no_login_and_expired) {
 TEST(test_status_lines) {
   AppModel m;
   m.state = AppState::Ok; m.lastUpdatedUtc = 1;
-  CHECK(StatusLine(m, Hhmm) == L"Updated 15:52");
+  CHECK(StatusLine(m, 5000, Hhmm) == L"Updated 15:52");
   m.state = AppState::NoLogin;
-  CHECK(StatusLine(m, Hhmm) == L"Not connected");
+  CHECK(StatusLine(m, 5000, Hhmm) == L"Not connected");
   m.state = AppState::Expired;
-  CHECK(StatusLine(m, Hhmm) == L"Login expired — open Claude Code to renew");
+  CHECK(StatusLine(m, 5000, Hhmm) == L"Login expired — open Claude Code to renew");
   m.state = AppState::AccessDenied;
-  CHECK(StatusLine(m, Hhmm) == L"Access denied — run /login in Claude Code");
+  CHECK(StatusLine(m, 5000, Hhmm) == L"Access denied — run /login in Claude Code");
   m.state = AppState::Error;
-  CHECK(StatusLine(m, Hhmm) == L"Couldn't reach Claude — last updated 15:52");
+  CHECK(StatusLine(m, 5000, Hhmm) == L"Couldn't reach Claude — last updated 15:52");
   m.lastUpdatedUtc.reset();
-  CHECK(StatusLine(m, Hhmm) == L"Couldn't reach Claude");
+  CHECK(StatusLine(m, 5000, Hhmm) == L"Couldn't reach Claude");
   m.state = AppState::ApiChanged; m.lastHttpStatus = 404;
-  CHECK(StatusLine(m, Hhmm) == L"Usage API changed (HTTP 404) — app may need an update");
+  CHECK(StatusLine(m, 5000, Hhmm) == L"Usage API changed (HTTP 404) — app may need an update");
   m.lastHttpStatus = 200;
-  CHECK(StatusLine(m, Hhmm) == L"Usage API changed — app may need an update");
+  CHECK(StatusLine(m, 5000, Hhmm) == L"Usage API changed — app may need an update");
+}
+
+TEST(test_status_line_now) {
+  AppModel m;
+  m.state = AppState::Ok; m.lastUpdatedUtc = 1000;
+  CHECK(StatusLine(m, 1000, Hhmm) == L"Updated now (15:52)");
+  CHECK(StatusLine(m, 1059, Hhmm) == L"Updated now (15:52)");
+  CHECK(StatusLine(m, 1060, Hhmm) == L"Updated 15:52");  // a full minute ago
+  CHECK(StatusLine(m, 990, Hhmm) == L"Updated now (15:52)");  // clock stepped back: still "now"
+  m.state = AppState::Error;
+  CHECK(StatusLine(m, 1010, Hhmm) == L"Couldn't reach Claude — last updated now (15:52)");
 }
 
 TEST(test_format_reset_soon) {
@@ -547,7 +558,7 @@ TEST(test_popup_view_ok) {
   CHECK(v.rows[0].fraction == 0.89);
   CHECK(v.rows[0].reset == L"Resets 17:39 (in 14m)");
   CHECK(v.rows[2].label == L"Weekly · Fable");
-  CHECK(v.status == L"Updated 15:52");
+  CHECK(v.status == L"Updated now (15:52)");  // just fetched
   CHECK(!v.statusIsError);
   CHECK(!v.showSettingsLink);
 }
@@ -591,19 +602,19 @@ TEST(test_settings_view_found) {
   AppModel m;
   ApplyCredResult(m, PollAction::Request, Creds(CredStatus::Found, 1795024800123LL));
   ApplyClassified(m, ClassifyResponse(Http(200, ReadFile("tests/fixtures/usage-2026-11-18.json"))), 1000);
-  auto v = BuildSettingsView(m, L"C:\\u\\.claude\\.credentials.json", Hhmm, FakeDateTime);
+  auto v = BuildSettingsView(m, L"C:\\u\\.claude\\.credentials.json", 1030, Hhmm, FakeDateTime);
   CHECK(v.login == L"Found");
   CHECK(v.plan == L"Team");
   CHECK(v.tokenExpires == L"DT1795024800");
   CHECK(v.path == L"C:\\u\\.claude\\.credentials.json");
-  CHECK(v.lastResult == L"Updated 15:52");
+  CHECK(v.lastResult == L"Updated now (15:52)");  // updated 30 s ago
   CHECK(!v.showInstructions);
 }
 
 TEST(test_settings_view_not_found) {
   AppModel m;
   ApplyCredResult(m, PollAction::MarkNoLogin, Creds(CredStatus::NotFound));
-  auto v = BuildSettingsView(m, L"p", Hhmm, FakeDateTime);
+  auto v = BuildSettingsView(m, L"p", 5000, Hhmm, FakeDateTime);
   CHECK(v.login == L"Not found");
   CHECK(v.plan == L"—");
   CHECK(v.tokenExpires == L"—");
@@ -614,17 +625,17 @@ TEST(test_settings_view_not_found) {
 TEST(test_settings_view_expired_and_denied) {
   AppModel m;
   ApplyCredResult(m, PollAction::MarkExpired, Creds(CredStatus::Found, 5000));
-  auto v = BuildSettingsView(m, L"p", Hhmm, FakeDateTime);
+  auto v = BuildSettingsView(m, L"p", 5000, Hhmm, FakeDateTime);
   CHECK(v.login == L"Expired");
   CHECK(v.tokenExpires == L"DT5");
   CHECK(v.showInstructions);
   m.state = AppState::AccessDenied;
-  v = BuildSettingsView(m, L"p", Hhmm, FakeDateTime);
+  v = BuildSettingsView(m, L"p", 5000, Hhmm, FakeDateTime);
   CHECK(v.login == L"Found");
   CHECK(v.lastResult == L"Access denied — run /login in Claude Code");
   CHECK(v.showInstructions);
   m.state = AppState::Error;
-  CHECK(!BuildSettingsView(m, L"p", Hhmm, FakeDateTime).showInstructions);
+  CHECK(!BuildSettingsView(m, L"p", 5000, Hhmm, FakeDateTime).showInstructions);
 }
 
 TEST(test_unreadable_streak_becomes_error) {
@@ -636,12 +647,12 @@ TEST(test_unreadable_streak_becomes_error) {
   ApplyCredResult(m, PollAction::KeepPrevious, Creds(CredStatus::Unreadable));
   CHECK(m.state == AppState::Error);  // 3 minutes unreadable: say so
   CHECK(m.last.has_value());
-  CHECK(StatusLine(m, Hhmm) == L"Can't read the Claude Code login file — last updated 15:52");
+  CHECK(StatusLine(m, 5000, Hhmm) == L"Can't read the Claude Code login file — last updated 15:52");
   // Readable again: back to normal on the next result.
   ApplyCredResult(m, PollAction::Request, Creds(CredStatus::Found, 99));
   ApplyClassified(m, ClassifyResponse(Http(200, ReadFile("tests/fixtures/usage-2026-11-18.json"))), 1060);
   CHECK(m.state == AppState::Ok);
-  CHECK(StatusLine(m, Hhmm) == L"Updated 15:52");
+  CHECK(StatusLine(m, 5000, Hhmm) == L"Updated 15:52");
   ApplyCredResult(m, PollAction::KeepPrevious, Creds(CredStatus::Unreadable));
   CHECK(m.state == AppState::Ok);  // streak restarted
 }
