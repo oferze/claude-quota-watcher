@@ -9,6 +9,8 @@ A small Windows tray app that shows your Claude plan usage. Hover over the tray 
 
 ![The usage popup above the tray icon](docs/images/popup.png)
 
+> Unofficial: this project is not affiliated with or endorsed by Anthropic.
+
 ## How it gets your usage
 
 It reuses the login that **Claude Code** already keeps in
@@ -82,3 +84,7 @@ Press `Win+R`, type `shell:startup`, and put a shortcut to `bin\ClaudeQuotaWatch
 
 - `--preview`: pins the popup open after the first update
 - `--settings`: opens the Settings window at startup
+
+## License
+
+[MIT](LICENSE) © 2026 Ofer Zelig
