@@ -35,8 +35,9 @@ The usage endpoint is undocumented, so Anthropic may change it. If that happens 
 
 ## Icon
 
-The icon's orange body turns grey from left to right as the **current session** is used up:
-all orange at 0%, left half grey at 50%, all grey at 100%. It updates once a minute.
+The icon is a ring that fills clockwise from 12 o'clock as the **current session** is used up:
+empty at 0%, half way round at 50%, a full circle at 100%. The filled part is orange, turns
+amber from 70% and red from 90%. It updates whenever new numbers arrive.
 
 ### Status dot
 

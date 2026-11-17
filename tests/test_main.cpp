@@ -465,31 +465,29 @@ std::vector<uint32_t> IconPixels(HICON icon, int size) {
 }
 }  // namespace
 
-TEST(test_tray_icon_usage_fill) {
-  // Session usage greys the orange body from the left: 0% all orange, 50% left half grey, 100% all grey.
+TEST(test_tray_icon_ring) {
+  // A progress ring fills clockwise from 12 o'clock with session usage, over a translucent grey track.
+  // Colour: orange below 70%, amber from 70%, red from 90%.
   const int n = 32;
-  const int left = n / 2 * n + 3, right = n / 2 * n + (n - 4);  // orange body pixels near each edge
+  const int at45 = 7 * n + 24, at270 = 15 * n + 4, at315 = 7 * n + 7;  // pixels on the ring, clockwise from top
   auto rgb = [](uint32_t v) { return v & 0xFFFFFF; };
-  struct Case { double fraction; uint32_t left, right; } cases[] = {
-      {0.0, 0xD97757, 0xD97757}, {0.5, 0xA0A0A0, 0xD97757}, {1.0, 0xA0A0A0, 0xA0A0A0}};
+  auto alpha = [](uint32_t v) { return v >> 24; };
+  const uint32_t track = 0x8A8A8A, orange = 0xD97757, amber = 0xE8A33D, red = 0xD93B30;
+  struct Case { double fraction; uint32_t c45, c270, c315; } cases[] = {
+      {0.0, track, track, track},   {0.5, orange, track, track}, {0.8, amber, amber, track},
+      {0.95, red, red, red},        {1.0, red, red, red}};
   for (const Case& c : cases) {
     HICON icon = MakeTrayIcon(DotColor::None, n, c.fraction);
     auto px = IconPixels(icon, n);
     DestroyIcon(icon);
     CHECK(px.size() == n * n);
     if (px.size() != n * n) continue;
-    CHECK(rgb(px[left]) == c.left);
-    CHECK(rgb(px[right]) == c.right);
+    CHECK(rgb(px[at45]) == c.c45);
+    CHECK(rgb(px[at270]) == c.c270);
+    CHECK(rgb(px[at315]) == c.c315);
+    CHECK(alpha(px[at45]) == (c.c45 == track ? 120u : 255u));  // the track is see-through, the arc solid
+    CHECK(alpha(px[n / 2 * n + n / 2]) == 0);                  // hollow centre
   }
-  // The used/unused boundary follows the fraction: at 25%, column 6 (center 6.5/32 ≈ 20%) is grey and
-  // column 10 (≈ 33%) is orange. Row 4 crosses the orange body above the white gauge ring.
-  HICON q = MakeTrayIcon(DotColor::None, n, 0.25);
-  auto qp = IconPixels(q, n);
-  DestroyIcon(q);
-  CHECK(qp.size() == n * n);
-  if (qp.size() != n * n) return;
-  CHECK(rgb(qp[4 * n + 6]) == 0xA0A0A0);
-  CHECK(rgb(qp[4 * n + 10]) == 0xD97757);
 }
 
 TEST(test_session_fraction) {
@@ -536,8 +534,6 @@ TEST(test_tray_icon_pixels) {
   auto alpha = [](uint32_t v) { return v >> 24; };
   auto rgb = [](uint32_t v) { return v & 0xFFFFFF; };
   CHECK(alpha(p[0]) == 0);                       // transparent corner
-  CHECK(alpha(p[n / 2 * n + 3]) == 255);         // opaque body (left edge of the disc, on orange)
-  CHECK(rgb(p[n / 2 * n + 3]) == 0xD97757);      // Claude orange
   const int dot = 25 * n + 25;                   // center of the status dot
   CHECK(rgb(r[dot]) == 0xE0302A);
   CHECK(rgb(g[dot]) == 0x808080);

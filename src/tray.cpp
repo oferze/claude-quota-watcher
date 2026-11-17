@@ -14,37 +14,29 @@ HICON g_icon = nullptr;
 
 struct Rgba { float r, g, b, a; };
 
-// Straight-alpha "over" compositing.
-Rgba Over(Rgba top, Rgba bottom) {
-  float a = top.a + bottom.a * (1 - top.a);
-  if (a <= 0) return {0, 0, 0, 0};
-  auto mix = [&](float t, float b) { return (t * top.a + b * bottom.a * (1 - top.a)) / a; };
-  return {mix(top.r, bottom.r), mix(top.g, bottom.g), mix(top.b, bottom.b), a};
-}
-
 constexpr float kPi = 3.14159265f;
 
+constexpr Rgba Hex(uint32_t rgb, float a = 1) {
+  return {((rgb >> 16) & 255) / 255.f, ((rgb >> 8) & 255) / 255.f, (rgb & 255) / 255.f, a};
+}
+
+// Arc colour by session usage: orange, amber from 70%, red from 90%.
+Rgba ArcColor(float used) {
+  return used >= 0.9f ? Hex(0xD93B30) : used >= 0.7f ? Hex(0xE8A33D) : Hex(0xD97757);
+}
+
 // Color of the glyph at normalized point (x, y) in [0,1]^2, before antialiasing.
-// usedFraction greys the orange body from the left edge (x < usedFraction).
+// A progress ring: the arc fills clockwise from 12 o'clock to usedFraction, over a see-through grey track.
 Rgba Sample(float x, float y, DotColor dot, float usedFraction) {
-  const Rgba orange{0xD9 / 255.f, 0x77 / 255.f, 0x57 / 255.f, 1};
-  const Rgba used{0xA0 / 255.f, 0xA0 / 255.f, 0xA0 / 255.f, 1};
   const Rgba white{1, 1, 1, 1};
   Rgba c{0, 0, 0, 0};
   const float dx = x - 0.5f, dy = y - 0.5f;
   const float d = std::sqrt(dx * dx + dy * dy);
-  if (d <= 0.48f) c = x < usedFraction ? used : orange;
-  // Gauge: a 270-degree white arc open at the bottom, plus a needle and hub.
-  float ang = std::atan2(dy, dx);              // y down: +pi/2 is straight down
-  float fromBottom = std::fabs(ang - kPi / 2);  // distance from "down" direction
-  if (fromBottom > kPi) fromBottom = 2 * kPi - fromBottom;
-  if (d >= 0.26f && d <= 0.36f && fromBottom >= kPi / 4) c = Over(white, c);
-  // Needle pointing up-right (about 60% of the gauge).
-  const float nx = std::cos(-kPi / 4), ny = std::sin(-kPi / 4);
-  const float t = dx * nx + dy * ny;
-  const float perp = std::fabs(dx * ny - dy * nx);
-  if (t >= 0 && t <= 0.30f && perp <= 0.045f) c = Over(white, c);
-  if (d <= 0.08f) c = Over(white, c);
+  if (d >= 0.26f && d <= 0.48f) {
+    float turn = std::atan2(dx, -dy) / (2 * kPi);  // 0 at 12 o'clock, clockwise (y points down)
+    if (turn < 0) turn += 1;
+    c = turn < usedFraction ? ArcColor(usedFraction) : Hex(0x8A8A8A, 120 / 255.f);
+  }
   if (dot != DotColor::None) {
     const Rgba fill = dot == DotColor::Red ? Rgba{0xE0 / 255.f, 0x30 / 255.f, 0x2A / 255.f, 1}
                                            : Rgba{0x80 / 255.f, 0x80 / 255.f, 0x80 / 255.f, 1};
