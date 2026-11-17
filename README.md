@@ -30,7 +30,7 @@ the app picks it up within a minute.
   screen comes back on. When the screen turns off is set by your Windows power settings
   (*Settings → System → Power → Screen timeout*).
 
-The usage endpoint is undocumented, so Anthropic may change it. If that happens the popup says
+If the usage endpoint (at Anthropic's side) changes, the popup will read
 *"Usage API changed — app may need an update"*.
 
 ## Icon
