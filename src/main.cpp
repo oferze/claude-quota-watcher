@@ -5,6 +5,7 @@
 
 #include <memory>
 
+#include "about.h"
 #include "poller.h"
 #include "popup.h"
 #include "settings.h"
@@ -26,6 +27,7 @@ struct App {
   UINT taskbarCreatedMsg = 0;
   std::unique_ptr<Popup> popup;
   std::unique_ptr<SettingsWindow> settings;
+  std::unique_ptr<AboutWindow> about;
   bool previewPending = false;  // --preview: pin the popup after the first result (for screenshots)
   HPOWERNOTIFY displayNotify = nullptr;
   bool displayOff = false;   // Windows turned the screen off (idle timeout, sleep): no polling
@@ -123,6 +125,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
           g_app.popup->Hide();
           g_app.settings->Show();
           break;
+        case IDM_ABOUT:
+          g_app.popup->Hide();
+          g_app.about->Show();
+          break;
         case IDM_EXIT:
           DestroyWindow(hwnd);
           break;
@@ -138,6 +144,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       if (g_app.displayNotify) UnregisterPowerSettingNotification(g_app.displayNotify);
       g_app.popup.reset();
       g_app.settings.reset();
+      g_app.about.reset();
       TrayRemove(hwnd);
       PostQuitMessage(0);
       return 0;
@@ -171,6 +178,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
                                         [] { PostMessageW(g_app.hwnd, WM_COMMAND, IDM_SETTINGS, 0); });
   // "Check again" re-reads the login and polls now, ignoring any Retry-After wait.
   g_app.settings = std::make_unique<SettingsWindow>(inst, &g_app.model, [] { PollNow(0); });
+  g_app.about = std::make_unique<AboutWindow>(inst);
   g_app.previewPending = wcsstr(GetCommandLineW(), L"--preview") != nullptr;
   TrayAdd(g_app.hwnd, DotFor(g_app.model.state), SessionFraction(g_app.model));
   g_app.lastCheckMs = TickMs();  // starting the app counts as a check: 30 minutes of 1-minute polling
@@ -180,11 +188,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
   g_app.displayNotify =
       RegisterPowerSettingNotification(g_app.hwnd, &GUID_CONSOLE_DISPLAY_STATE, DEVICE_NOTIFY_WINDOW_HANDLE);
   if (wcsstr(GetCommandLineW(), L"--settings")) g_app.settings->Show();
+  if (wcsstr(GetCommandLineW(), L"--about")) g_app.about->Show();
 
   MSG msg;
   while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+    // Tab / Enter / Esc in the Settings and About windows.
     HWND sw = g_app.settings ? g_app.settings->hwnd() : nullptr;
-    if (sw && IsDialogMessageW(sw, &msg)) continue;  // Tab / Enter / Esc in the Settings window
+    if (sw && IsDialogMessageW(sw, &msg)) continue;
+    HWND aw = g_app.about ? g_app.about->hwnd() : nullptr;
+    if (aw && IsDialogMessageW(aw, &msg)) continue;
     TranslateMessage(&msg);
     DispatchMessageW(&msg);
   }

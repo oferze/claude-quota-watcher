@@ -1,0 +1,32 @@
+// Version details shown in the exe's Properties → Details. Built by build.bat (rc /c65001: this file is UTF-8).
+#include <winver.h>
+
+#include "src/version.h"
+
+1 VERSIONINFO
+FILEVERSION APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_PATCH, 0
+PRODUCTVERSION APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_PATCH, 0
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "FileDescription", "Claude Quota Watcher"
+      VALUE "FileVersion", APP_VERSION_TEXT
+      VALUE "InternalName", "ClaudeQuotaWatcher"
+      VALUE "LegalCopyright", "© 2026 Ofer Zelig"
+      VALUE "OriginalFilename", "ClaudeQuotaWatcher.exe"
+      VALUE "ProductName", "Claude Quota Watcher"
+      VALUE "ProductVersion", APP_VERSION_TEXT
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

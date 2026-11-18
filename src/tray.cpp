@@ -157,6 +157,7 @@ void TrayRemove(HWND hwnd) {
 void ShowTrayMenu(HWND hwnd, POINT pt) {
   HMENU menu = CreatePopupMenu();
   AppendMenuW(menu, MF_STRING, IDM_SETTINGS, L"Settings…");
+  AppendMenuW(menu, MF_STRING, IDM_ABOUT, L"About…");
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenuW(menu, MF_STRING, IDM_EXIT, L"Exit");
   SetForegroundWindow(hwnd);

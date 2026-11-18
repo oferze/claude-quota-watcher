@@ -68,7 +68,8 @@ Requires Visual Studio with the C++ workload (MSVC). From the
 **x64 Native Tools Command Prompt for VS**:
 
 ```bat
-build.bat          :: builds bin\ClaudeQuotaWatcher.exe
+build.bat          :: builds bin\ClaudeQuotaWatcher.exe (version from src\version.h, now 1.0.0)
+build.bat 1.2.3    :: builds it as version 1.2.3
 build.bat test     :: builds and runs the unit tests (bin\tests.exe)
 build.bat clean    :: deletes bin\ and obj\
 ```
@@ -84,6 +85,7 @@ Press `Win+R`, type `shell:startup`, and put a shortcut to `bin\ClaudeQuotaWatch
 
 - `--preview`: pins the popup open after the first update
 - `--settings`: opens the Settings window at startup
+- `--about`: opens the About window at startup
 
 ## License
 

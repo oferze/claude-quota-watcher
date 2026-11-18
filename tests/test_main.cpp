@@ -15,6 +15,7 @@
 #include "state.h"
 #include "tray.h"
 #include "usage.h"
+#include "version.h"
 
 namespace {
 struct TestCase { const char* name; void (*fn)(); };
@@ -665,6 +666,15 @@ TEST(test_dot_colors) {
   CHECK(DotFor(AppState::AccessDenied) == DotColor::Grey);
   CHECK(DotFor(AppState::Error) == DotColor::Red);
   CHECK(DotFor(AppState::ApiChanged) == DotColor::Red);
+}
+
+// ---------------------------------------------------------------- version
+
+TEST(test_version_text_matches_numbers) {
+  char expected[32];
+  std::snprintf(expected, sizeof(expected), "%d.%d.%d", APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_PATCH);
+  CHECK(std::strcmp(APP_VERSION_TEXT, expected) == 0);
+  CHECK(std::wstring(L"" APP_VERSION_TEXT) == std::wstring(expected, expected + std::strlen(expected)));
 }
 
 // ---------------------------------------------------------------- main
