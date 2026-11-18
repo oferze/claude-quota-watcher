@@ -2,6 +2,7 @@
 
 #include "credentials.h"
 #include "popup_view.h"
+#include "resource.h"
 
 namespace {
 
@@ -28,6 +29,9 @@ SettingsWindow::SettingsWindow(HINSTANCE inst, const AppModel* model, std::funct
   wc.hInstance = inst;
   wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
   wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
+  wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(IDI_APP));
+  wc.hIconSm = static_cast<HICON>(LoadImageW(inst, MAKEINTRESOURCEW(IDI_APP), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+                                             GetSystemMetrics(SM_CYSMICON), 0));
   wc.lpszClassName = kClass;
   RegisterClassExW(&wc);
 }

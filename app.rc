@@ -1,7 +1,11 @@
-// Version details shown in the exe's Properties → Details. Built by build.bat (rc /c65001: this file is UTF-8).
+// The exe's icon, and the version details shown in its Properties → Details.
+// Built by build.bat (rc /c65001: this file is UTF-8).
 #include <winver.h>
 
+#include "src/resource.h"
 #include "src/version.h"
+
+IDI_APP ICON "app.ico"
 
 1 VERSIONINFO
 FILEVERSION APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_PATCH, 0

@@ -5,6 +5,7 @@
 
 #include <string>
 
+#include "resource.h"
 #include "tray.h"
 #include "version.h"
 
@@ -28,6 +29,9 @@ AboutWindow::AboutWindow(HINSTANCE inst) : inst_(inst) {
   wc.hInstance = inst;
   wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
   wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
+  wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(IDI_APP));
+  wc.hIconSm = static_cast<HICON>(LoadImageW(inst, MAKEINTRESOURCEW(IDI_APP), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+                                             GetSystemMetrics(SM_CYSMICON), 0));
   wc.lpszClassName = kClass;
   RegisterClassExW(&wc);
 }
